@@ -8,7 +8,9 @@ import datetime
 #import xlwt
 import pickle
 
-scr_list = Person.objects.filter(village__block__district__district_name='Guna').annotate(adoptions=Count('personadoptpractice')).filter(adoptions__gte=5).values_list('id','personmeetingattendance__screening__videoes_screened','personmeetingattendance__screening__date')
+study_block_name = 'Keonjhar'
+
+scr_list = Person.objects.filter(village__block__block_name=study_block_name).annotate(adoptions=Count('personadoptpractice')).filter(group__isnull=False).values_list('id','personmeetingattendance__screening__videoes_screened','personmeetingattendance__screening__date')
 scr_date = {}
 for person_id, video_id, date in scr_list:
     if not scr_date.has_key(person_id):
@@ -20,7 +22,7 @@ for person_id, video_id, date in scr_list:
                 scr_date[person_id][video_id] = date
 
 
-adopter_ids =  Person.objects.filter(village__block__district__district_name='Guna').annotate(adoptions=Count('personadoptpractice')).filter(adoptions__gte=5).values_list('id', flat=True)
+adopter_ids =  Person.objects.filter(village__block__block_name=study_block_name).annotate(adoptions=Count('personadoptpractice')).filter(group__isnull=False).values_list('id', flat=True)
 adoption_list = []
 for id in adopter_ids:
     row = PersonAdoptPractice.objects.filter(person=id).values('person','video', 'date_of_adoption')
@@ -60,7 +62,7 @@ video_count = {}
 
 for video in adoption_date.keys():
     video_count[video] = {}
-    for village in Village.objects.filter(block__district__district_name='Guna'):
+    for village in Village.objects.filter(block__block_name=study_block_name):
         video_count[video][village.id] = Person.objects.filter(village = village, personmeetingattendance__screening__videoes_screened=video).count()
 
 video_block_count = {}
@@ -68,25 +70,22 @@ video_dist_count = {}
 for video in adoption_date.keys():
     video_block_count[video] = {}
     video_dist_count[video] = 0
-    for block in Block.objects.filter(district__district_name='Guna'):
+    for block in Block.objects.filter(block__block_name=study_block_name):
         video_block_count[video][block.id] = Person.objects.filter(village__block = block, personmeetingattendance__screening__videoes_screened=video).count()
         video_dist_count[video] = video_dist_count[video] + video_block_count[video][block.id]
 
-village_dist = {}  
-for v1 in Village.objects.filter(block__district__district_name='Guna'):
-    village_dist[v1.id] = {}
-    for v2 in Village.objects.filter(block__district__district_name='Guna'):
+group_dist = {}  
+for v1 in PersonGroups.objects.filter(block__block_name=study_block_name):
+    group_dist[v1.id] = {}
+    for v2 in PersonGroups.objects.filter(block__block_name=study_block_name):
         if v1 == v2:
-            village_dist[v1.id][v2.id] = 1
-        elif v1.block == v2.block:
-            village_dist[v1.id][v2.id] = 2
+            group_dist[v1.id][v2.id] = 1
+        elif v1.village == v2.village:
+            group_dist[v1.id][v2.id] = 4
         else:
-            village_dist[v1.id][v2.id] = 3
-            
-    
+            group_dist[v1.id][v2.id] = 16
 
-
-for person, video_seen_list in screening_date.iteritems():
+def get_confused(person):
     person_obj = Person.objects.get(id=person)
     confusion = {
         'tp' : 0,
@@ -109,7 +108,7 @@ for person, video_seen_list in screening_date.iteritems():
                 for p, date_of_adoption in adoption_date[video].iteritems():
                     p_obj = Person.objects.get(id=p)
                     if date_of_adoption >= date:
-                        dist = village_dist[person_obj.village.id][p_obj.village.id]
+                        dist = group_dist[person_obj.group.id][p_obj.group.id]
                         tmp_tp = tmp_tp + 1.0/dist
                 confusion['tp'] = confusion['tp'] + tmp_tp
                 confusion['fp'] = confusion['fp'] + total_num_people - tmp_tp - 1
@@ -119,18 +118,19 @@ for person, video_seen_list in screening_date.iteritems():
                 for p, date_of_adoption in adoption_date[video].iteritems():
                     p_obj = Person.objects.get(id=p)
                     if date_of_adoption > date:
-                        dist = village_dist[person_obj.village.id][p_obj.village.id]
+                        dist = group_dist[person_obj.group.id][p_obj.group.id]
                         tmp = tmp + 1.0/dist
                 confusion['fn'] = confusion['fn'] + tmp
                 confusion['tn'] = confusion['tn'] + total_num_people - tmp - 1
-    try:    
-        print confusion
+    return confusion
+
+for person, video_seen_list in screening_date.iteritems():
+    confusion = get_confused(person)
+    try:
         fscore[person] = 2.0*confusion['tp']/(2*confusion['tp'] + confusion['fn'] + confusion['fp'])
+        print person + " " + str(fscore[person])
     except ZeroDivisionError:
         fscore[person] = 0
-
-
-
 
 
 
