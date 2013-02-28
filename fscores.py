@@ -70,14 +70,14 @@ video_dist_count = {}
 for video in adoption_date.keys():
     video_block_count[video] = {}
     video_dist_count[video] = 0
-    for block in Block.objects.filter(block__block_name=study_block_name):
+    for block in Block.objects.filter(block_name=study_block_name):
         video_block_count[video][block.id] = Person.objects.filter(village__block = block, personmeetingattendance__screening__videoes_screened=video).count()
         video_dist_count[video] = video_dist_count[video] + video_block_count[video][block.id]
 
 group_dist = {}  
-for v1 in PersonGroups.objects.filter(block__block_name=study_block_name):
+for v1 in PersonGroups.objects.filter(village__block__block_name=study_block_name):
     group_dist[v1.id] = {}
-    for v2 in PersonGroups.objects.filter(block__block_name=study_block_name):
+    for v2 in PersonGroups.objects.filter(village__block__block_name=study_block_name):
         if v1 == v2:
             group_dist[v1.id][v2.id] = 1
         elif v1.village == v2.village:
@@ -128,9 +128,14 @@ for person, video_seen_list in screening_date.iteritems():
     confusion = get_confused(person)
     try:
         fscore[person] = 2.0*confusion['tp']/(2*confusion['tp'] + confusion['fn'] + confusion['fp'])
-        print person + " " + str(fscore[person])
+        print str(person) + " " + str(fscore[person])
     except ZeroDivisionError:
         fscore[person] = 0
-
+      
+fp = open('keonjhar','wb')
+pickle.dump({
+    'fscore': fscore,
+},fp)
+fp.close()
 
 
